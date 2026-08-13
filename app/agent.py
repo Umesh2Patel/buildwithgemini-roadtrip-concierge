@@ -77,6 +77,7 @@ from app.firestore_tools import (
     search_roadtrip_stops,
 )
 from app.route_tools import calculate_route_metrics
+from app.video_tools import generate_scenic_roadtrip_video
 
 
 code_executor = AgentEngineSandboxCodeExecutor(
@@ -139,6 +140,7 @@ root_agent = Agent(
         add_roadtrip_stop,
         get_stop_details,
         calculate_route_metrics,
+        generate_scenic_roadtrip_video,
         PreloadMemoryTool(),
     ],
     code_executor=code_executor,
