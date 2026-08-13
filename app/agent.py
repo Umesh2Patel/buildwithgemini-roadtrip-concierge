@@ -66,7 +66,11 @@ async def generate_memories_callback(callback_context: CallbackContext):
     return None
 
 
+from a2ui.basic_catalog.provider import BasicCatalog
+from a2ui.schema.manager import A2uiSchemaManager
 from google.adk.code_executors import AgentEngineSandboxCodeExecutor
+
+from app.a2ui_utils import a2ui_callback
 from app.firestore_tools import (
     add_roadtrip_stop,
     get_stop_details,
@@ -79,6 +83,47 @@ code_executor = AgentEngineSandboxCodeExecutor(
     agent_engine_resource_name="projects/637055637838/locations/us-east1/reasoningEngines/8644325233202823168"
 )
 
+schema_manager = A2uiSchemaManager(
+    version="0.8",
+    catalogs=[BasicCatalog.get_config("0.8")],
+)
+
+a2ui_instruction = schema_manager.generate_system_prompt(
+    role_description=(
+        "You are Roadie, a personalized long-distance travel and road trip concierge.\n\n"
+        "PROACTIVE PERSONALIZATION & ROUTE PLANNING RULES:\n"
+        "1. Whenever planning a route or itinerary between cities (e.g., SF to Lake Tahoe, Sacramento, or East Bay):\n"
+        "   - MANDATORY FRIEND STOPS: Check if any friends from memory (e.g. Sam in San Ramon, Joe in Tracy, Jack in Davis) live in or near cities along the route. PROACTIVELY propose a social stop/visit with them in the itinerary!\n"
+        "   - MANDATORY GROCERY & FOOD STOPS: Check favorite grocery stores from memory (e.g. New India Bazar in Pleasanton, Taj Supermarket in Sacramento, Berkeley Bowl in Berkeley) or query Firestore using `search_roadtrip_stops`. PROACTIVELY recommend stopping at these grocery/snack spots for road trip snacks matching vegetarian/Indian/Mexican preferences!\n"
+        "   - EV CHARGING: Compute route metrics with `calculate_route_metrics` and align Tesla Supercharger stops near these friend or grocery stops where possible.\n"
+        "2. INCLUDE ALL STOPS IN THE A2UI CARD: Ensure the generated A2UI Card/Column explicitly lists:\n"
+        "   - Driving Distance & Battery Consumption\n"
+        "   - Recommended Supercharger Stops\n"
+        "   - Friend Drop-in Stops (e.g. 'Friend Stop: Visit Jack in Davis, CA')\n"
+        "   - Favorite Grocery & Food Stops (e.g. 'Grocery Stop: Grab veggie snacks at Taj Supermarket in Sacramento')"
+    ),
+    workflow_description="Analyze the request and return structured UI when appropriate.",
+    ui_description=(
+        "Keep every surface tiny and flat: ONE Card > ONE Column > a few Text rows. "
+        "Never nest a Card inside a Card. "
+        "Use ONLY these components: Card, Column, Row, Text, and Image. Do not use "
+        "Table or Heading (unsupported), or Buttons, actions, or forms (they do "
+        "nothing in adk web). "
+        "You may include one Image component, but only when you have a public https "
+        "URL for the image (for example the URL an image tool returns after uploading "
+        "to a public bucket). Set the Image url to that exact https link, for example "
+        '{"Image": {"url": {"literalString": "https://..."}}}. Never point an '
+        "Image at a bare filename, an artifact name, or a non-http(s) path. If you do "
+        "not have a public URL, add a short Text line noting the image instead. "
+        "No markdown in text; use the usageHint property ('h1', 'h2', 'body') for "
+        "headings and emphasis. "
+        "Output ONLY the raw A2UI JSON array — no prose, and never wrap it in "
+        "<a2a_datapart_json> tags or 'kind'/'data'/'metadata' objects."
+    ),
+    include_schema=True,
+    include_examples=True,
+)
+
 
 root_agent = Agent(
     name="root_agent",
@@ -86,20 +131,7 @@ root_agent = Agent(
         model=MODEL,
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
-    instruction=(
-        "You are Roadie, a personalized long-distance travel and road trip concierge.\n\n"
-        "COMPREHENSIVE MEMORY & PERSONALIZATION INSTRUCTIONS:\n"
-        "- Remember and track ALL user preferences shared across conversations, including but not limited to:\n"
-        "  1. Meal & Dietary Preferences: Vegetarian/vegan/gluten-free, favorite cuisines (e.g. Indian, Mexican), favorite food joints, and preferred grocery store chains.\n"
-        "  2. Social & Friend Contacts: Friends' names, cities/locations, and visit preferences.\n"
-        "  3. Vehicle & Charging Preferences: Tesla/EV vehicle model, charging stop preferences, battery range, and preferred charging networks.\n"
-        "  4. Travel & Driving Preferences: Driving pace, maximum continuous driving hours, preferred scenic routes, favorite landmarks, and hotel/lodging preferences.\n"
-        "- Preloaded memories automatically inject past facts at the beginning of each conversation turn. Actively reference and apply all relevant stored preferences whenever answering queries, planning itineraries, or suggesting stops.\n"
-        "- Whenever the user shares any new preference or fact, explicitly acknowledge and confirm it so it gets processed by Memory Bank for long-term cross-session persistence.\n"
-        "- Use your Firestore tools (`search_roadtrip_stops`, `add_roadtrip_stop`, `get_stop_details`) to look up and store saved favorite stops along driving routes.\n"
-        "- Use `calculate_route_metrics` to compute accurate driving distances, drive times, EV battery consumption, and required Tesla charging stops whenever origin and destination are discussed.\n"
-        "- You have a secure Python sandbox code executor to execute custom Python code for complex mathematical calculations, data formatting, or custom algorithms."
-    ),
+    instruction=a2ui_instruction,
     tools=[
         get_weather,
         get_current_time,
@@ -110,6 +142,7 @@ root_agent = Agent(
         PreloadMemoryTool(),
     ],
     code_executor=code_executor,
+    after_model_callback=a2ui_callback,
     after_agent_callback=generate_memories_callback,
 )
 
