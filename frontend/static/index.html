@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
     --accent: #2563eb;
@@ -45,6 +47,30 @@
     align-items: center;
     gap: 0.5rem;
   }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .toggle-map-btn {
+    background: #0f172a;
+    border: 1px solid var(--border);
+    color: #38bdf8;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s ease;
+  }
+  .toggle-map-btn:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
   .status-badge {
     font-size: 0.75rem;
     background: rgba(34, 197, 94, 0.15);
@@ -69,13 +95,59 @@
     50% { opacity: 0.4; transform: scale(1.3); }
     100% { opacity: 1; transform: scale(1); }
   }
+
+  /* --- Main Split View Layout --- */
+  .main-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .chat-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+  }
+
+  /* --- Interactive Map Side Panel --- */
+  #map-panel {
+    width: 380px;
+    background: #1e293b;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease, width 0.3s ease;
+  }
+  #map-panel.hidden {
+    display: none;
+  }
+  #map-header {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #map-container {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
   #log {
     flex: 1;
     overflow-y: auto;
     padding: 1.2rem;
-    max-width: 800px;
     width: 100%;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
@@ -126,9 +198,7 @@
     display: flex;
     gap: 0.5rem;
     padding: 0.6rem 1.2rem;
-    max-width: 800px;
     width: 100%;
-    margin: 0 auto;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -178,9 +248,7 @@
     padding: 1rem 1.2rem;
     border-top: 1px solid var(--border);
     background: #1e293b;
-    max-width: 800px;
     width: 100%;
-    margin: 0 auto;
     border-radius: 16px 16px 0 0;
   }
   input {
@@ -238,29 +306,47 @@
 <body>
 <header>
   <div class="brand">🚗 Roadie Concierge</div>
-  <div class="status-badge">
-    <div class="pulse-dot"></div> Agent Runtime Online
+  <div class="header-actions">
+    <button class="toggle-map-btn" onclick="toggleMap()">
+      <span class="material-symbols-outlined">map</span> Toggle Route Map
+    </button>
+    <div class="status-badge">
+      <div class="pulse-dot"></div> Agent Runtime Online
+    </div>
   </div>
 </header>
 
-<div id="log"></div>
+<div class="main-container">
+  <div class="chat-section">
+    <div id="log"></div>
 
-<div class="chips-container">
-  <div class="chip" onclick="sendPrompt('Plan my road trip from SF to Lake Tahoe in my Tesla Model Y starting at 80% battery')">🚗 SF to Tahoe</div>
-  <div class="chip" onclick="sendPrompt('Where is Sam located and what are my favorite grocery stops?')">🛒 Grocery & Friends</div>
-  <div class="chip" onclick="sendPrompt('Find Tesla Superchargers near Sacramento')">🔋 Superchargers</div>
-  <div class="chip" onclick="sendPrompt('What food/snack stops do I have saved in Firestore?')">⭐ Saved Stops</div>
+    <div class="chips-container">
+      <div class="chip" onclick="sendPrompt('Plan my road trip from SF to Lake Tahoe in my Tesla Model Y starting at 80% battery')">🚗 SF to Tahoe</div>
+      <div class="chip" onclick="sendPrompt('Where is Sam located and what are my favorite grocery stops?')">🛒 Grocery & Friends</div>
+      <div class="chip" onclick="sendPrompt('Find Tesla Superchargers near Sacramento')">🔋 Superchargers</div>
+      <div class="chip" onclick="sendPrompt('What food/snack stops do I have saved in Firestore?')">⭐ Saved Stops</div>
+    </div>
+
+    <form id="form">
+      <input id="input" placeholder="Ask Roadie for road trip routes, EV charging, or stops…" autocomplete="off" autofocus>
+      <button>Send</button>
+    </form>
+  </div>
+
+  <div id="map-panel">
+    <div id="map-header">
+      <span>🗺️ Route & Waypoint Map</span>
+      <span style="font-size: 0.75rem; color: var(--text-muted);">Interactive EV Map</span>
+    </div>
+    <div id="map-container"></div>
+  </div>
 </div>
-
-<form id="form">
-  <input id="input" placeholder="Ask Roadie for road trip routes, EV charging, or stops…" autocomplete="off" autofocus>
-  <button>Send</button>
-</form>
 
 <script>
 const log = document.getElementById("log");
 const form = document.getElementById("form");
 const input = document.getElementById("input");
+let map, routePolyline, markersGroup;
 
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
@@ -279,6 +365,50 @@ function sendPrompt(txt) {
   input.value = txt;
   form.dispatchEvent(new Event('submit'));
 }
+
+function toggleMap() {
+  const panel = document.getElementById("map-panel");
+  panel.classList.toggle("hidden");
+  if (!panel.classList.contains("hidden") && map) {
+    setTimeout(() => map.invalidateSize(), 200);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * Leaflet Map Initialization & Waypoints
+ * -------------------------------------------------------------------------- */
+function initMap() {
+  map = L.map('map-container').setView([38.2, -121.5], 8);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  }).addTo(map);
+
+  markersGroup = L.layerGroup().addTo(map);
+
+  // Default Route Waypoints (San Francisco -> San Ramon -> Tracy -> Sacramento -> Davis -> Lake Tahoe)
+  const waypoints = [
+    { name: "San Francisco (Start)", lat: 37.7749, lng: -122.4194, icon: "📍" },
+    { name: "Sam's House (San Ramon)", lat: 37.7799, lng: -121.9780, icon: "🤝" },
+    { name: "Joe's House (Tracy)", lat: 37.7397, lng: -121.4252, icon: "🤝" },
+    { name: "Sacramento Tesla Supercharger", lat: 38.5816, lng: -121.4944, icon: "🔋" },
+    { name: "Jack's House (Davis)", lat: 38.5449, lng: -121.7405, icon: "🤝" },
+    { name: "Lake Tahoe (Destination)", lat: 39.0968, lng: -120.0324, icon: "🏔️" }
+  ];
+
+  const coords = waypoints.map(w => [w.lat, w.lng]);
+  routePolyline = L.polyline(coords, { color: '#2563eb', weight: 4, opacity: 0.8, dashArray: '8, 8' }).addTo(map);
+
+  waypoints.forEach(w => {
+    L.marker([w.lat, w.lng])
+      .bindPopup(`<b>${w.icon} ${w.name}</b>`)
+      .addTo(markersGroup);
+  });
+
+  map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
+}
+
+window.addEventListener("DOMContentLoaded", initMap);
 
 /* ----------------------------------------------------------------------------
  * A2UI mini-renderer (v0.8 Basic Catalog subset).
